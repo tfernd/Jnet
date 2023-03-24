@@ -32,7 +32,7 @@ def make_block(kind: BlockKind):
             nn.Conv2d(channels, 2 * channels, kernel_size, padding="same"),
             nn.BatchNorm2d(2 * channels),
             nn.GLU(dim=1),
-            nn.BatchNorm2d(2 * channels),
+            nn.BatchNorm2d(channels),
             nn.Conv2d(channels, channels, kernel_size, padding="same"),
             nn.BatchNorm2d(channels),
         )
