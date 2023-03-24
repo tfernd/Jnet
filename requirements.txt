@@ -1,0 +1,5 @@
+lightning
+einops
+torch
+numpy
+PIL
