@@ -49,10 +49,19 @@ class ColorMix(nn.Module):
         self.enc.bias.data = bias
         self.dec.bias.data = -bias @ Winv.T
 
+    @property
+    def dtype(self) -> torch.dtype:
+        return self.enc.weight.data.dtype
+
+    @property
+    def device(self) -> torch.device:
+        return self.enc.weight.data.device
+
     def encode(self, x: Tensor) -> Tensor:
         assert x.dtype == torch.uint8
 
         with torch.set_grad_enabled(self.training):
+            x = x.to(dtype=self.dtype, device=self.device)
             out = self.enc(x / self.scale)
 
             # clamp but keep gradients

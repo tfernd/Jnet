@@ -21,4 +21,4 @@ class Rearrange(nn.Module):
             return rearrange(x, self.pattern, **self.axes_length, **axes_length)  # type: ignore
 
     def extra_repr(self) -> str:
-        return f"pattern=\"{self.pattern}\""
+        return f'pattern="{self.pattern}"'
