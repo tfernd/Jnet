@@ -49,9 +49,10 @@ class ImageDataset(Dataset):
             width, height = img.size
 
         # random crop
-        pw = random.randint(0, width - self.width)
-        ph = random.randint(0, height - self.height)
+        if width > self.width or height > self.height:
+            pw = random.randint(0, width - self.width)
+            ph = random.randint(0, height - self.height)
 
-        img = img.crop((pw, ph, pw + self.width, ph + self.height))
+            img = img.crop((pw, ph, pw + self.width, ph + self.height))
 
         return image2tensor(img)
