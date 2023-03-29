@@ -23,11 +23,11 @@ def make_block(kind: BlockKind):
 
         return nn.Sequential(
             conv(channels, channels),
-            nn.BatchNorm2d(channels),
+            # nn.BatchNorm2d(channels),
             nn.GELU(),
-            nn.BatchNorm2d(channels),
+            # nn.BatchNorm2d(channels),
             conv(channels, channels),
-            nn.BatchNorm2d(channels),
+            # nn.BatchNorm2d(channels),
         )
 
     def gated_block(channels: int, kernel_size: int) -> nn.Sequential:
@@ -35,11 +35,11 @@ def make_block(kind: BlockKind):
 
         return nn.Sequential(
             conv(channels, 2 * channels),
-            nn.BatchNorm2d(2 * channels),
+            # nn.BatchNorm2d(2 * channels),
             nn.GLU(dim=1),
-            nn.BatchNorm2d(channels),
+            # nn.BatchNorm2d(channels),
             conv(channels, channels),
-            nn.BatchNorm2d(channels),
+            # nn.BatchNorm2d(channels),
         )
 
     if kind == "normal":
