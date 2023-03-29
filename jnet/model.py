@@ -19,21 +19,26 @@ BlockKind = Literal["gated", "normal"]
 
 def make_block(kind: BlockKind):
     def normal_block(channels: int, kernel_size: int) -> nn.Sequential:
+        conv = partial(nn.Conv2d, kernel_size=kernel_size, padding="same")
+
         return nn.Sequential(
-            nn.Conv2d(channels, channels, kernel_size, padding="same"),
+            conv(channels, channels),
             nn.BatchNorm2d(channels),
             nn.GELU(),
-            nn.Conv2d(channels, channels, kernel_size, padding="same"),
+            nn.BatchNorm2d(channels),
+            conv(channels, channels),
             nn.BatchNorm2d(channels),
         )
 
     def gated_block(channels: int, kernel_size: int) -> nn.Sequential:
+        conv = partial(nn.Conv2d, kernel_size=kernel_size, padding="same")
+
         return nn.Sequential(
-            nn.Conv2d(channels, 2 * channels, kernel_size, padding="same"),
+            conv(channels, 2 * channels),
             nn.BatchNorm2d(2 * channels),
             nn.GLU(dim=1),
             nn.BatchNorm2d(channels),
-            nn.Conv2d(channels, channels, kernel_size, padding="same"),
+            conv(channels, channels),
             nn.BatchNorm2d(channels),
         )
 
@@ -80,7 +85,7 @@ class JNet(nn.Module):
         self.enc_scale = nn.Parameter(torch.zeros(num_layers[0]).fill_(0.001))
         self.dec_scale = nn.Parameter(torch.zeros(num_layers[1]).fill_(0.001))
 
-        # bottleneck
+        # bottleneck # TODO transform into conv2d with kernel-size=1
         W = torch.eye(emb_size)[:, :latent_size]
         self.channel_crop = nn.Parameter(W)
         self.channel_uncrop = nn.Parameter(W.T)

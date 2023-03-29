@@ -15,18 +15,13 @@ from .utils import image2tensor
 
 
 class ImageDataset(Dataset):
-    def __init__(
-        self,
-        root: str | Path,
-        height: int,
-        width: int,
-    ) -> None:
+    def __init__(self, root: str | Path, height: int, width: int, suffix: str = ".jpg") -> None:
         root = Path(root)
 
         self.height = height
         self.width = width
 
-        paths = list(root.rglob("*.jpg"))
+        paths = list(root.rglob(f"*{suffix}"))
 
         self.paths = paths
 

@@ -8,7 +8,10 @@ from einops import rearrange
 
 
 class Rearrange(nn.Module):
-    "A module that rearranges the input tensor based on the given pattern using the einops.rearrange function."
+    """
+    A module that rearranges the input tensor
+    based on the given pattern using the einops.rearrange function.
+    """
 
     def __init__(self, pattern: str, **axes_length: int) -> None:
         super().__init__()

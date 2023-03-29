@@ -138,8 +138,6 @@ class BlockDCT(nn.Module):
         x: Tensor,
         size: Optional[tuple[int, int]] = None,
     ) -> Tensor:
-        B, C, H, W = x.shape
-
         with torch.set_grad_enabled(self.training):
             x = self.freq_unshuffle(x)
             x = self.split_block_channels(x)
