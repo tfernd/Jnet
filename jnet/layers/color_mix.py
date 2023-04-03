@@ -12,12 +12,7 @@ class ColorMix(nn.Module):
 
     scale: float = 255 / 2
 
-    W: nn.Parameter
-    W_inv: nn.Parameter
-    bias: nn.Parameter
-    bias_inv: nn.Parameter
-
-    def __init__(self, num_channels: int = 3) -> None:
+    def __init__(self, num_channels: int) -> None:
         super().__init__()
 
         self.num_channels = num_channels
@@ -62,14 +57,8 @@ class ColorMix(nn.Module):
 
         with torch.set_grad_enabled(self.training):
             x = x.to(dtype=self.dtype, device=self.device)
-            out = self.enc(x / self.scale)
 
-            # clamp but keep gradients
-            clamped = out.detach().clamp(-1, 1)
-            if not self.training:
-                return clamped
-
-            return clamped + (out - out.detach())  # [-1, 1]
+            return self.enc(x / self.scale)
 
     def decode(self, x: Tensor) -> Tensor:
         with torch.set_grad_enabled(self.training):

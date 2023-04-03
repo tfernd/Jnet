@@ -44,13 +44,12 @@ class BlockDCT(nn.Module):
         W *= math.sqrt(2 / blocks)
         W[:, 0].fill_(math.sqrt(1 / blocks))
 
+        # DCT weights
         self.W = nn.Parameter(W)
         self.W_inv = nn.Parameter(W.inverse())  # W.T also works :)
 
-        # patch-wise matrix multiplication
+        # patch-wise matrix multiplication (for the 2d DCT)
         self.pw_mm = partial(torch.einsum, "bhwcHW,Hi,Wj->bhwcij")
-        # channel-wise matrix multiplication
-        self.cw_mm = partial(torch.einsum, "bchw,ck->bkhw")
 
         # Define functions for rearranging input tensor into patches and vice-versa
         self.to_patches = Rearrange("b c (h ph) (w pw) -> b h w c ph pw", ph=blocks, pw=blocks)

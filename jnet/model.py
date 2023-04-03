@@ -1,8 +1,5 @@
 from __future__ import annotations
 from typing import Optional
-from typing_extensions import Literal
-
-from functools import partial
 
 import torch
 import torch.nn as nn
@@ -11,38 +8,18 @@ from torch import Tensor
 
 import lightning.pytorch as pl
 
-from .layers import ColorMix, BlockDCT
+from .layers import ColorMix, BlockDCT, LayerNorm
 
 
-BlockKind = Literal["gated", "normal"]
+def block(channels: int, kernel_size: int, ratio: float) -> nn.Sequential:
+    mid_channels = round(channels * ratio)
 
-
-def make_block(kind: BlockKind):
-    def normal_block(channels: int, kernel_size: int) -> nn.Sequential:
-        conv = partial(nn.Conv2d, kernel_size=kernel_size, padding="same")
-
-        return nn.Sequential(
-            conv(channels, channels),
-            nn.BatchNorm2d(channels),
-            nn.GELU(),
-            conv(channels, channels),
-            nn.BatchNorm2d(channels),
-        )
-
-    def gated_block(channels: int, kernel_size: int) -> nn.Sequential:
-        conv = partial(nn.Conv2d, kernel_size=kernel_size, padding="same")
-
-        return nn.Sequential(
-            conv(channels, 2 * channels),
-            nn.BatchNorm2d(2 * channels),
-            nn.GLU(dim=1),
-            conv(channels, channels),
-            nn.BatchNorm2d(channels),
-        )
-
-    if kind == "normal":
-        return normal_block
-    return gated_block
+    return nn.Sequential(
+        LayerNorm(channels),
+        nn.Conv2d(channels, mid_channels, kernel_size, padding="same"),
+        nn.GELU(),
+        nn.Conv2d(mid_channels, channels, kernel_size, padding="same"),
+    )
 
 
 class JNet(nn.Module):
@@ -52,8 +29,8 @@ class JNet(nn.Module):
         blocks: int = 8,
         latent_size: int = 4,
         kernel_size: int = 3,
+        ratio: float = 4,
         num_layers: int | tuple[int, int] = 1,
-        kind: BlockKind = "normal",
     ) -> None:
         super().__init__()
 
@@ -64,7 +41,6 @@ class JNet(nn.Module):
         self.latent_size = latent_size
         self.kernel_size = kernel_size
         self.num_layers = num_layers
-        self.kind = kind
 
         self.emb_size = emb_size = num_channels * blocks**2
         assert 1 <= latent_size <= emb_size
@@ -76,22 +52,20 @@ class JNet(nn.Module):
         self.color_mix = ColorMix(num_channels)
         self.block_dct = BlockDCT(blocks, num_channels)
 
-        block = make_block(kind)
-        self.enc_blocks = nn.ModuleList([block(emb_size, kernel_size) for _ in range(num_layers[0])])
-        self.dec_blocks = nn.ModuleList([block(emb_size, kernel_size) for _ in range(num_layers[1])])
+        self.enc_blocks = nn.ModuleList([block(emb_size, kernel_size, ratio) for _ in range(num_layers[0])])
+        self.dec_blocks = nn.ModuleList([block(emb_size, kernel_size, ratio) for _ in range(num_layers[1])])
 
         self.enc_scale = nn.Parameter(torch.zeros(num_layers[0]).fill_(0.001))
         self.dec_scale = nn.Parameter(torch.zeros(num_layers[1]).fill_(0.001))
 
-        # bottleneck # TODO transform into conv2d with kernel-size=1
+        # bottleneck
         W = torch.eye(emb_size)[:, :latent_size]
-        self.channel_crop = nn.Parameter(W)
-        self.channel_uncrop = nn.Parameter(W.T)
 
-        # channel-wise matrix multiplication
-        self.cw_mm = partial(torch.einsum, "bchw,ck->bkhw")
+        self.channel_crop = nn.Conv2d(emb_size, latent_size, kernel_size=1, bias=False)
+        self.channel_uncrop = nn.Conv2d(latent_size, emb_size, kernel_size=1, bias=False)
 
-        self.eval()
+        self.channel_crop.weight.data = W.T[..., None, None]
+        self.channel_uncrop.weight.data = W[..., None, None]
 
     def encode(self, x: Tensor) -> Tensor:
         with torch.set_grad_enabled(self.training):
@@ -101,7 +75,7 @@ class JNet(nn.Module):
             for scale, block in zip(self.enc_scale, self.enc_blocks):
                 x = x + scale * block(x)
 
-            x = self.cw_mm([x, self.channel_crop])
+            x = self.channel_crop(x)
 
             return x
 
@@ -111,7 +85,7 @@ class JNet(nn.Module):
         size: Optional[tuple[int, int]] = None,
     ) -> Tensor:
         with torch.set_grad_enabled(self.training):
-            x = self.cw_mm([x, self.channel_uncrop])
+            x = self.channel_uncrop(x)
 
             for scale, block in zip(self.dec_scale, self.dec_blocks):
                 x = x + scale * block(x)
@@ -136,11 +110,21 @@ class JNetModel(pl.LightningModule):
         z = self.model.encode(x)
         xhat = self.model.decode(z, size=(H, W))
 
-        loss = F.l1_loss(xhat, x.float())
+        x = x.to(self.dtype)
+        loss = F.l1_loss(xhat, x)
 
-        self.log("train_loss", loss)
+        dx_hat = x[..., 1:, :] - x[..., :-1, :]
+        dy_hat = x[..., :, 1:] - x[..., :, :-1]
 
-        return loss
+        dxhat_hat = xhat[..., 1:, :] - xhat[..., :-1, :]
+        dyhat_hat = xhat[..., :, 1:] - xhat[..., :, :-1]
+
+        grad_loss = F.l1_loss(dx_hat, dxhat_hat) + F.l1_loss(dy_hat, dyhat_hat)
+
+        self.log("loss", loss)
+        self.log("grad_loss", grad_loss)
+
+        return loss + grad_loss * 0.1
 
     def configure_optimizers(self):
         optimizer = torch.optim.AdamW(self.parameters(), lr=self.lr)
